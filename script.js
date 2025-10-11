@@ -558,6 +558,290 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     //analizador semantico
+    function analizarSemanticoCompleto(codigo) {
+        const resultado = [];
+
+        // Eliminar saltos de línea innecesarios
+        codigo = codigo.replace(/\r\n/g, "\n").trim();
+
+        function analizarBloque(codigoBloque) {
+            let index = 0;
+
+            while (index < codigoBloque.length) {
+                let resto = codigoBloque.slice(index).trim();
+
+                // ------------------ DECLARAR ------------------
+                let declararMatch = resto.match(/^declarar\s+(entero|flotante|cadena|conEntero|conFlotante|conCadena|booleano)\s+[a-zA-Z_]\w*\s*=\s*[^;]+;/i);
+                if (declararMatch) {
+                    resultado.push("instruct -> declarar tipo var = exp;");
+                    resultado.push("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
+                    resultado.push("var -> A-Z || a-z");
+                    resultado.push("exp -> num || var");
+                    index += declararMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ MOSTRAR ------------------
+                let mostrarMatch = resto.match(/^mostrar\s*\("[^"]*"\);/i);
+                if (mostrarMatch) {
+                    resultado.push('instruct -> mostrar("let (let||num||b)*")');
+                    index += mostrarMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ CONVERTIRENTERO ------------------
+                let convertirMatch = resto.match(/^convertirEntero\s*\([^\)]+\);/i);
+                if (convertirMatch) {
+                    resultado.push('instruct -> convertirEntero(exp);');
+                    resultado.push("exp -> var || num");
+                    index += convertirMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ ALEATORIONUMERO ------------------
+                let aleatorioMatch = resto.match(/^aleatorioNumero\s*\([^\)]+\);/i);
+                if (aleatorioMatch) {
+                    resultado.push('instruct -> aleatorioNumero(num, num);');
+                    resultado.push("num -> 0-9");
+                    index += aleatorioMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ COMPARAR ------------------
+                let compararMatch = resto.match(/^comparar\s*\(([^\)]+)\)\s*\{/i);
+                if (compararMatch) {
+                    let cond = compararMatch[1].trim();
+                    resultado.push("instruct -> comparar(exp oprel exp){ instruct instruct* }" + (resto.includes("sino{") ? " sino { instruct instruct* }" : ""));
+                    resultado.push("exp -> var || num");
+                    resultado.push("oprel -> >= || <= || == || != || > || <");
+                    resultado.push("let -> A-Z || a-z");
+                    resultado.push("num -> 0-9");
+
+                    // Contenido dentro de {}
+                    let openBraces = 1;
+                    let i = compararMatch[0].length;
+                    while (i < resto.length && openBraces > 0) {
+                        if (resto[i] === '{') openBraces++;
+                        else if (resto[i] === '}') openBraces--;
+                        i++;
+                    }
+                    let bloqueInterno = resto.slice(compararMatch[0].length, i - 1);
+                    analizarBloque(bloqueInterno);
+
+                    // Sino
+                    let sinoMatch = resto.slice(i).match(/^sino\s*\{/i);
+                    if (sinoMatch) {
+                        let startSino = i + sinoMatch[0].length;
+                        let openSino = 1;
+                        let j = startSino;
+                        while (j < resto.length && openSino > 0) {
+                            if (resto[j] === '{') openSino++;
+                            else if (resto[j] === '}') openSino--;
+                            j++;
+                        }
+                        let bloqueSino = resto.slice(startSino, j - 1);
+                        analizarBloque(bloqueSino);
+                        i = j;
+                    }
+
+                    index += i;
+                    continue;
+                }
+
+                // ------------------ MIENTRAS ------------------
+                let mientrasMatch = resto.match(/^mientras\s*\([^\)]+\)\s*\{/i);
+                if (mientrasMatch) {
+                    resultado.push("instruct -> mientras(exp oprel exp){ instruct instruct* }");
+                    resultado.push("exp -> var || num");
+                    resultado.push("oprel -> >= || <= || == || != || > || <");
+                    resultado.push("let -> A-Z || a-z");
+                    resultado.push("num -> 0-9");
+
+                    let openBraces = 1;
+                    let i = mientrasMatch[0].length;
+                    while (i < resto.length && openBraces > 0) {
+                        if (resto[i] === '{') openBraces++;
+                        else if (resto[i] === '}') openBraces--;
+                        i++;
+                    }
+                    let bloqueInterno = resto.slice(mientrasMatch[0].length, i - 1);
+                    analizarBloque(bloqueInterno);
+                    index += i;
+                    continue;
+                }
+
+                // ------------------ PARA ------------------
+                let paraMatch = resto.match(/^para\s*\([^\)]+\)\s*\{/i);
+                if (paraMatch) {
+                    resultado.push("instruct -> para(var = exp; exp oprel exp; var++||var--){ instruct instruct* }");
+                    resultado.push("exp -> var || num");
+                    resultado.push("oprel -> >= || <= || == || != || > || <");
+                    resultado.push("let -> A-Z || a-z");
+                    resultado.push("num -> 0-9");
+
+                    let openBraces = 1;
+                    let i = paraMatch[0].length;
+                    while (i < resto.length && openBraces > 0) {
+                        if (resto[i] === '{') openBraces++;
+                        else if (resto[i] === '}') openBraces--;
+                        i++;
+                    }
+                    let bloqueInterno = resto.slice(paraMatch[0].length, i - 1);
+                    analizarBloque(bloqueInterno);
+                    index += i;
+                    continue;
+                }
+
+                // ------------------ FUNCION ------------------
+                let funcionMatch = resto.match(/^funcion\s+[a-zA-Z_]\w*\s*\([^\)]*\)\s*\{/i);
+                if (funcionMatch) {
+                    resultado.push("instruct -> funcion id(parametros){ instruct instruct* }");
+                    resultado.push("id -> A-Z || a-z");
+                    let openBraces = 1;
+                    let i = funcionMatch[0].length;
+                    while (i < resto.length && openBraces > 0) {
+                        if (resto[i] === '{') openBraces++;
+                        else if (resto[i] === '}') openBraces--;
+                        i++;
+                    }
+                    let bloqueInterno = resto.slice(funcionMatch[0].length, i - 1);
+                    analizarBloque(bloqueInterno);
+                    index += i;
+                    continue;
+                }
+
+                // ------------------ SELECCIONAR ------------------
+                let seleccionarMatch = resto.match(/^seleccionar\s*\([^\)]+\)\s*\{/i);
+                if (seleccionarMatch) {
+                    resultado.push("instruct -> seleccionar(var){ caso|porDefecto instruct* }");
+                    let openBraces = 1;
+                    let i = seleccionarMatch[0].length;
+                    while (i < resto.length && openBraces > 0) {
+                        if (resto[i] === '{') openBraces++;
+                        else if (resto[i] === '}') openBraces--;
+                        i++;
+                    }
+                    let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
+                    analizarBloque(bloqueInterno);
+                    index += i;
+                    continue;
+                }
+
+                // ------------------ DEFINIRCLASE ------------------
+                let claseMatch = resto.match(/^definirClase\s+[A-Z][a-zA-Z0-9_]*\s*\{/i);
+                if (claseMatch) {
+                    resultado.push("instruct -> definirClase(IdClase){ iniciar(parametros){ ESTE.var = var;* } metodo* }");
+                    let openBraces = 1;
+                    let i = claseMatch[0].length;
+                    while (i < resto.length && openBraces > 0) {
+                        if (resto[i] === '{') openBraces++;
+                        else if (resto[i] === '}') openBraces--;
+                        i++;
+                    }
+                    let bloqueInterno = resto.slice(claseMatch[0].length, i - 1);
+                    analizarBloque(bloqueInterno);
+                    index += i;
+                    continue;
+                }
+
+                // ------------------ DIVIDIRCADENA ------------------
+                let dividirMatch = resto.match(/^dividirCadena\s*\([^\)]+\);/i);
+                if (dividirMatch) {
+                    resultado.push('instruct -> dividirCadena(exp, exp);');
+                    resultado.push("exp -> var || texto");
+                    index += dividirMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ FECHAACTUAL ------------------
+                let fechaMatch = resto.match(/^fechaActual\s*\([^\)]+\);/i);
+                if (fechaMatch) {
+                    resultado.push('instruct -> fechaActual(tipo_fecha);');
+                    resultado.push('tipo_fecha -> dia || mes || año || hora || minuto || segundo');
+                    index += fechaMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ EXISTE ------------------
+                let existeMatch = resto.match(/^existe\s*\([^\)]+\);/i);
+                if (existeMatch) {
+                    resultado.push('instruct -> existe([num], num);');
+                    resultado.push('num -> 0-9');
+                    index += existeMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ TAMAÑOCADENA ------------------
+                let tamMatch = resto.match(/^tamañoCadena\s*\("[^"]*"\);/i);
+                if (tamMatch) {
+                    resultado.push('instruct -> tamañoCadena("texto");');
+                    index += tamMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ PAUSARYREANUDARGENERADOR ------------------
+                let pausaMatch = resto.match(/^PausaryReanudarGenerador\s*\([^\)]+\);/i);
+                if (pausaMatch) {
+                    resultado.push('instruct -> PausaryReanudarGenerador(var);');
+                    index += pausaMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ AUTOEJECUTAR ------------------
+                let autoMatch = resto.match(/^autoejecutar\s*\([^\)]+\);/i);
+                if (autoMatch) {
+                    resultado.push('instruct -> autoejecutar(var, num);');
+                    index += autoMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ CAPTURAR ------------------
+                let capturarMatch = resto.match(/^capturar\s*\("[^"]*"\);/i);
+                if (capturarMatch) {
+                    resultado.push('instruct -> capturar("texto");');
+                    index += capturarMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ ORDENAR ------------------
+                let ordenarMatch = resto.match(/^ordenar\s*\([^\)]+\);/i);
+                if (ordenarMatch) {
+                    resultado.push('instruct -> ordenar([exp]);');
+                    index += ordenarMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ EQUIPO ------------------
+                let equipoMatch = resto.match(/^equipo\s*\(\);/i);
+                if (equipoMatch) {
+                    resultado.push('instruct -> equipo();');
+                    index += equipoMatch[0].length;
+                    continue;
+                }
+
+                // ------------------ OBTENERCARACTER ------------------
+                let obtenerMatch = resto.match(/^obtenerCaracter\s*\([^\)]+\);/i);
+                if (obtenerMatch) {
+                    resultado.push('instruct -> obtenerCaracter(exp, num);');
+                    index += obtenerMatch[0].length;
+                    continue;
+                }
+
+                // Si no reconoce, avanzar al siguiente ';' o fin de bloque
+                let nextSemicolon = resto.indexOf(';');
+                if (nextSemicolon !== -1) {
+                    index += nextSemicolon + 1;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        analizarBloque(codigo);
+        return resultado.join("\n");
+    }
+
+
 
     analizarSemanticoBtn.addEventListener("click", () => {
         const codigo = input.value.trim();
@@ -565,7 +849,7 @@ document.addEventListener("DOMContentLoaded", () => {
             resultBox.value = "Por favor ingresa el código a analizar.";
             return;
         }
-        const resultado = analizarSemantico(codigo);
+        const resultado = analizarSemanticoCompleto(codigo);
         resultBox.value = resultado;
     });
 });
