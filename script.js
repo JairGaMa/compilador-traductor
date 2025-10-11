@@ -524,9 +524,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     salirBtn.addEventListener("click", () => {
-        if (confirm("¿Estás seguro que quieres salir?")) {
-            window.close();
-        }
+        Swal.fire({
+            title: '¿Estás seguro que quieres salir?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, salir',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.close();
+            }
+        });
     });
 
     equipoBtn.addEventListener("click", () => {
@@ -539,6 +547,25 @@ document.addEventListener("DOMContentLoaded", () => {
             "Ramirez Vazquez Wendy Itzel",
             "Vargas Guillén José Ricardo"
         ];
-        alert("Equipo: Dragones 🐉\n\n" + integrantes.join("\n") + "\n\n Docente: Silva Hernández Felipe");
+
+        Swal.fire({
+            title: 'Equipo: Dragones 🐉',
+            html: integrantes.join('<br>') + '<br><br>Docente: Silva Hernández Felipe',
+            icon: 'success',
+            confirmButtonText: 'Cerrar'
+        });
+    });
+
+
+    //analizador semantico
+
+    analizarSemanticoBtn.addEventListener("click", () => {
+        const codigo = input.value.trim();
+        if (codigo === "") {
+            resultBox.value = "Por favor ingresa el código a analizar.";
+            return;
+        }
+        const resultado = analizarSemantico(codigo);
+        resultBox.value = resultado;
     });
 });
