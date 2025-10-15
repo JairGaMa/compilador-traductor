@@ -835,6 +835,22 @@ function analizarSemanticoCompleto(codigo) {
                 continue;
             }
 
+            // ------------------ ASIGNACIÓN O EXPRESIÓN ARITMÉTICA ------------------
+            let asignacionMatch = resto.match(/^([a-zA-Z_]\w*)\s*=\s*[^;]+;/i);
+            if (asignacionMatch) {
+                resultado.push("instruct -> var = exp;");
+                agregarRegla("exp -> var || num || exp opera exp (opera exp)*");
+                agregarRegla("opera -> operatit|| oprel || oplog");
+                agregarRegla("oparit -> + || - || * || / || % || ^");
+                agregarRegla("oprel -> >= || <= || == || != || > || <");
+                agregarRegla("oplog -> && || || || !");
+                agregarRegla("var -> A-Z || a-z");
+                agregarRegla("num -> 0-9");
+                index += asignacionMatch[0].length;
+                continue;
+            }
+
+
             // ------------------ No reconocido ------------------
             let nextSemicolon = resto.indexOf(';');
             if (nextSemicolon !== -1) {
