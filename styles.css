@@ -184,3 +184,8 @@ body {
     font-family: Arial, sans-serif !important;
     font-size: 28px !important;
 }
+
+textarea {
+    resize: vertical !important; 
+    width: 100% !important;
+}
