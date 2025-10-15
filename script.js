@@ -948,8 +948,10 @@ function analizarSemanticoCompleto(codigo) {
                     resultado.push("opera -> (sin operadores)");
                 }
 
-                resultado.push("var -> A-Z || a-z");
-                resultado.push("num -> 0-9");
+                agregarRegla("var -> let (let||num)*");
+                agregarRegla("let -> A-Z || a-z");
+                agregarRegla("num -> dig dig*");
+                agregarRegla("dig -> 0-9");
 
                 index += asignacionMatch[0].length;
                 continue;
