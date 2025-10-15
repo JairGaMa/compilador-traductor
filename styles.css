@@ -185,7 +185,8 @@ body {
     font-size: 28px !important;
 }
 
-textarea {
+textarea:first-of-type {
     resize: vertical !important; 
     width: 100% !important;
+    min-height: 150px !important;
 }
