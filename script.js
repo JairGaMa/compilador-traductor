@@ -581,12 +581,13 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ DECLARAR ------------------
             let declararMatch = resto.match(/^declarar\s+(entero|flotante|cadena|conEntero|conFlotante|conCadena|booleano)\s+[a-zA-Z_]\w*\s*=\s*[^;]+;/i);
             if (declararMatch) {
-                resultado.push("instruct -> declarar tipo var = exp;");
+                resultado.push("instruct -> declarar tipo var = expDec;");
                 agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
-                agregarRegla("exp -> num || var");
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("expDec -> num || var");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += declararMatch[0].length;
                 continue;
@@ -595,7 +596,11 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ MOSTRAR ------------------
             let mostrarMatch = resto.match(/^mostrar\s*\("[^"]*"\);/i);
             if (mostrarMatch) {
-                resultado.push('instruct -> mostrar("let (let||num||b)*")');
+                resultado.push('instruct -> mostrar("let (let||numV||b)*") || mostrar(var);');
+                agregarRegla("var -> let (let||numV)*");
+                agregarRegla("let -> A-Z || a-z");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("dig -> 0-9");
                 index += mostrarMatch[0].length;
                 continue;
             }
@@ -603,11 +608,12 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ CONVERTIRENTERO ------------------
             let convertirMatch = resto.match(/^convertirEntero\s*\([^\)]+\);/i);
             if (convertirMatch) {
-                resultado.push('instruct -> convertirEntero(exp);');
-                agregarRegla("exp -> var || num");
-                agregarRegla("var -> let (let||num)*");
+                resultado.push('instruct -> convertirEntero(expConInt);');
+                agregarRegla("expConInt -> var || num");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += convertirMatch[0].length;
                 continue;
@@ -617,9 +623,10 @@ function analizarSemanticoCompleto(codigo) {
             let aleatorioMatch = resto.match(/^aleatorioNumero\s*\([^\)]+\);/i);
             if (aleatorioMatch) {
                 resultado.push('instruct -> aleatorioNumero((var||num),(var || num);');
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += aleatorioMatch[0].length;
                 continue;
@@ -628,12 +635,13 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ COMPARAR ------------------
             let compararMatch = resto.match(/^comparar\s*\(([^\)]+)\)\s*\{/i);
             if (compararMatch) {
-                resultado.push("instruct -> comparar(exp oprel exp){ instruct instruct* }" + (resto.includes("sino{") ? " sino { instruct instruct* }" : ""));
-                agregarRegla("exp -> var || num");
+                resultado.push("instruct -> comparar(expComp oprel expComp){ instruct instruct* }" + (resto.includes("sino{") ? " sino { instruct instruct* }" : ""));
+                agregarRegla("expComp -> var || num");
                 agregarRegla("oprel -> >= || <= || == || != || > || <");
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
 
                 // Contenido dentro de {}
@@ -670,23 +678,43 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ MIENTRAS ------------------
             let mientrasMatch = resto.match(/^mientras\s*\([^\)]+\)\s*\{/i);
             if (mientrasMatch) {
-                resultado.push("instruct -> mientras(exp oprel exp){ instruct instruct* }");
-                agregarRegla("exp -> var || num");
+                resultado.push("instruct -> mientras(expMien oprel expMien){ instruct instruct* }");
+                agregarRegla("expMien -> var || num");
                 agregarRegla("oprel -> >= || <= || == || != || > || <");
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
 
+                // --- Capturar bloque interno ---
                 let openBraces = 1;
-                let i = mientrasMatch[0].length;
+                let i = seleccionarMatch[0].length;
                 while (i < resto.length && openBraces > 0) {
                     if (resto[i] === '{') openBraces++;
                     else if (resto[i] === '}') openBraces--;
                     i++;
                 }
-                let bloqueInterno = resto.slice(mientrasMatch[0].length, i - 1);
-                analizarBloque(bloqueInterno);
+
+                let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
+
+                // --- Analizar cada 'caso' y 'porDefecto' ---
+                const casoRegex = /caso\s+([^\:]+)\s*:\s*([\s\S]*?)terminar;/gi;
+                let match;
+                while ((match = casoRegex.exec(bloqueInterno)) !== null) {
+                    const instrucciones = match[2].trim();
+                    // Analizar las instrucciones internas
+                    analizarBloque(instrucciones);
+                }
+
+                const porDefectoRegex = /porDefecto\s*:\s*([\s\S]*?)terminar;/i;
+                const porDefectoMatch = porDefectoRegex.exec(bloqueInterno);
+                if (porDefectoMatch) {
+                    const instruccionesPD = porDefectoMatch[1].trim();
+                    // Analizar las instrucciones internas del porDefecto
+                    analizarBloque(instruccionesPD);
+                }
+
                 index += i;
                 continue;
             }
@@ -694,12 +722,13 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ PARA ------------------
             let paraMatch = resto.match(/^para\s*\([^\)]+\)\s*\{/i);
             if (paraMatch) {
-                resultado.push("instruct -> para(var = exp; exp oprel exp; var++||var--){ instruct instruct* }");
-                agregarRegla("exp -> var || num");
+                resultado.push("instruct -> para(var = expPara; expPara oprel expPara; var++||var--){ instruct instruct* }");
+                agregarRegla("expPara -> var || num");
                 agregarRegla("oprel -> >= || <= || == || != || > || <");
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
 
                 let openBraces = 1;
@@ -719,12 +748,12 @@ function analizarSemanticoCompleto(codigo) {
             let funcionMatch = resto.match(/^funcion\s+[a-zA-Z_]\w*\s*\([^\)]*\)\s*\{/i);
             if (funcionMatch) {
                 resultado.push("instruct -> funcion id(parametros){ instruct instruct* }");
-                agregarRegla("id -> let (let||num)*");
+                agregarRegla("id -> let (let||numV)*");
                 agregarRegla("parametros -> (tipo var (, tipo var)*) || ε");
                 agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
                 agregarRegla("dig -> 0-9");
                 
 
@@ -742,37 +771,65 @@ function analizarSemanticoCompleto(codigo) {
             }
 
             // ------------------ SELECCIONAR ------------------
-            let seleccionarMatch = resto.match(/^seleccionar\s*\([^\)]+\)\s*\{/i);
-            if (seleccionarMatch) {
-                resultado.push("instruct -> seleccionar(var){ caso (num||var) || porDefecto instruct* }");
-                agregarRegla("var -> let (let||num)*");
-                agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
-                agregarRegla("dig -> 0-9");
-                
-                let openBraces = 1;
-                let i = seleccionarMatch[0].length;
-                while (i < resto.length && openBraces > 0) {
-                    if (resto[i] === '{') openBraces++;
-                    else if (resto[i] === '}') openBraces--;
-                    i++;
-                }
-                let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
-                analizarBloque(bloqueInterno);
-                index += i;
-                continue;
-            }
+            // ------------------ SELECCIONAR ------------------
+let seleccionarMatch = resto.match(/^seleccionar\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*\{/i);
+if (seleccionarMatch) {
+    const variable = seleccionarMatch[1].trim();
+
+    // Regla estricta de salida
+    resultado.push("instruct -> seleccionar(var){ caso (numV||var||texto||bool): instruct terminar; (caso (numV||var||texto||bool): instruct terminar;)* porDefecto: instruct instruct* terminar; }");
+
+    // Reglas auxiliares
+    agregarRegla("var -> let (let||numV)*");
+    agregarRegla("let -> A-Z || a-z");
+    agregarRegla("numV -> dig dig*");
+    agregarRegla("dig -> 0-9");
+    agregarRegla("texto -> \" let (let||numV||b)* \"");
+    agregarRegla("bool -> verdadero || falso || true || false");
+
+    // --- Capturar bloque interno ---
+    let openBraces = 1;
+    let i = seleccionarMatch[0].length;
+    while (i < resto.length && openBraces > 0) {
+        if (resto[i] === '{') openBraces++;
+        else if (resto[i] === '}') openBraces--;
+        i++;
+    }
+
+    let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
+
+    // --- Analizar cada 'caso' y 'porDefecto' ---
+    const casoRegex = /caso\s+([^\:]+)\s*:\s*([\s\S]*?)terminar;/gi;
+    let match;
+    while ((match = casoRegex.exec(bloqueInterno)) !== null) {
+        const instrucciones = match[2].trim();
+        // Analizar las instrucciones internas
+        analizarBloque(instrucciones);
+    }
+
+    const porDefectoRegex = /porDefecto\s*:\s*([\s\S]*?)terminar;/i;
+    const porDefectoMatch = porDefectoRegex.exec(bloqueInterno);
+    if (porDefectoMatch) {
+        const instruccionesPD = porDefectoMatch[1].trim();
+        // Analizar las instrucciones internas del porDefecto
+        analizarBloque(instruccionesPD);
+    }
+
+    index += i;
+    continue;
+}
+
 
             // ------------------ DEFINIRCLASE ------------------
             let claseMatch = resto.match(/^definirClase\s+[A-Z][a-zA-Z0-9_]*\s*\{/i);
             if (claseMatch) {
                 resultado.push("instruct -> definirClase(IdClase){ iniciar(parametros){ ESTE.var = var;* } metodo* }");
-                agregarRegla("IdClase -> let (let||num)*");
+                agregarRegla("IdClase -> let (let||numV)*");
                 agregarRegla("parametros -> (tipo var (, tipo var)*) || ε");
                 agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
                 agregarRegla("dig -> 0-9");
                 
                 let openBraces = 1;
@@ -791,11 +848,11 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ DIVIDIRCADENA ------------------
             let dividirMatch = resto.match(/^dividirCadena\s*\([^\)]+\);/i);
             if (dividirMatch) {
-                resultado.push('instruct -> dividirCadena(exp, exp);');
-                agregarRegla("exp -> var");
-                agregarRegla("var -> let (let||num)*");
+                resultado.push('instruct -> dividirCadena(expDivCad, exp);');
+                agregarRegla("expDivCad -> var");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += dividirMatch[0].length;
                 continue;
@@ -804,7 +861,7 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ FECHAACTUAL ------------------
             let fechaMatch = resto.match(/^fechaActual\s*\([^\)]+\);/i);
             if (fechaMatch) {
-                resultado.push('instruct -> fechaActual(tipo_fecha);');
+                resultado.push('instruct -> fechaActual("tipo_fecha");');
                 agregarRegla('tipo_fecha -> dia || mes || año || hora || minuto || segundo');
                 index += fechaMatch[0].length;
                 continue;
@@ -814,9 +871,10 @@ function analizarSemanticoCompleto(codigo) {
             let existeMatch = resto.match(/^existe\s*\([^\)]+\);/i);
             if (existeMatch) {
                 resultado.push('instruct -> existe((var || num), (var || num));');
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += existeMatch[0].length;
                 continue;
@@ -828,7 +886,7 @@ function analizarSemanticoCompleto(codigo) {
                 resultado.push('instruct -> tamañoCadena("texto");');
                 agregarRegla('texto -> let (let||num||b)*');
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += tamMatch[0].length;
                 continue;
@@ -838,9 +896,9 @@ function analizarSemanticoCompleto(codigo) {
             let pausaMatch = resto.match(/^PausaryReanudarGenerador\s*\([^\)]+\);/i);
             if (pausaMatch) {
                 resultado.push('instruct -> PausaryReanudarGenerador(var);');
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += pausaMatch[0].length;
                 continue;
@@ -850,21 +908,21 @@ function analizarSemanticoCompleto(codigo) {
             let autoMatch = resto.match(/^autoejecutar\s*\([^\)]+\);/i);
             if (autoMatch) {
                 resultado.push('instruct -> autoejecutar(var, var);');
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += autoMatch[0].length;
                 continue;
             }
 
             // ------------------ CAPTURAR ------------------
-            let capturarMatch = resto.match(/^capturar\s*\("[^"]*"\);/i);
+            let capturarMatch = resto.match(/^capturar\s*\(\s*([a-zA-Z_]\w*)\s*\);/i);
             if (capturarMatch) {
-                resultado.push('instruct -> capturar("texto");');
-                agregarRegla('texto -> let (let||num||b)*');
+                resultado.push('instruct -> capturar(var);');
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += capturarMatch[0].length;
                 continue;
@@ -873,11 +931,12 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ ORDENAR ------------------
             let ordenarMatch = resto.match(/^ordenar\s*\([^\)]+\);/i);
             if (ordenarMatch) {
-                resultado.push('instruct -> ordenar([exp (, exp*)*]);');
-                agregarRegla("exp -> var || num");
-                agregarRegla("var -> let (let||num)*");
+                resultado.push('instruct -> ordenar([expOrde (, expOrde*)*]);');
+                agregarRegla("expOrde -> var || num");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += ordenarMatch[0].length;
                 continue;
@@ -894,12 +953,12 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ OBTENERCARACTER ------------------
             let obtenerMatch = resto.match(/^obtenerCaracter\s*\([^\)]+\);/i);
             if (obtenerMatch) {
-                resultado.push('instruct -> obtenerCaracter(exp, num);');
-                agregarRegla("exp -> var || texto");
-                agregarRegla('texto -> let (let||num||b)*');
-                agregarRegla("var -> let (let||num)*");
+                resultado.push('instruct -> obtenerCaracter(expObtCarac, num);');
+                agregarRegla("expObtCarac -> var || num");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
                 index += obtenerMatch[0].length;
                 continue;
@@ -908,54 +967,77 @@ function analizarSemanticoCompleto(codigo) {
             // ------------------ ASIGNACIÓN O EXPRESIÓN ARITMÉTICA ------------------
             let asignacionMatch = resto.match(/^([a-zA-Z_]\w*)\s*=\s*([^;]+);/i);
             if (asignacionMatch) {
-                const expresion = asignacionMatch[2].trim();
+                const variable = asignacionMatch[1].trim();
+                let expresion = asignacionMatch[2].trim();
 
-                // Detectar operadores presentes en la expresión
-                const operadores = [];
-                const mapaOperadores = {
-                    '+': 'oparit',
-                    '-': 'oparit',
-                    '*': 'oparit',
-                    '/': 'oparit',
-                    '%': 'oparit',
-                    '^': 'oparit',
-                    '>': 'oprel',
-                    '<': 'oprel',
-                    '>=': 'oprel',
-                    '<=': 'oprel',
-                    '==': 'oprel',
-                    '!=': 'oprel',
-                    '&&': 'oplog',
-                    '||': 'oplog',
-                    '!': 'oplog'
-                };
+                // Operadores en orden de prioridad (primero los de 2 caracteres)
+                const operadores = [
+                    '>=', '<=', '==', '!=', '&&', '||',
+                    '+', '-', '*', '/', '%', '^', '>', '<', '!'
+                ];
 
-                // Buscar operadores reales que aparecen en la asignación
-                for (const op in mapaOperadores) {
-                    const regex = new RegExp(`\\${op}(?!=)|(?<![=!<>])\\${op}`, 'g'); // evitar falsos positivos
-                    if (expresion.includes(op)) {
-                        operadores.push(op);
-                    }
+                // Detectar operadores usados sin falsos positivos
+                const operadoresUsados = new Set();
+
+                // Detectar operadores dobles primero
+                const operadoresDobles = ['>=', '<=', '==', '!=', '&&', '||'];
+                for (const op of operadoresDobles) {
+                    if (expresion.includes(op)) operadoresUsados.add(op);
                 }
 
-                resultado.push("instruct -> var = exp;");
-                resultado.push("exp -> var || num || exp opera exp (opera exp)*");
+                // Detectar operadores simples que no formen parte de un doble
+                const operadoresSimples = ['+', '-', '*', '/', '%', '^', '>', '<', '!'];
+                for (const op of operadoresSimples) {
+                    const regex = new RegExp(
+                        op === '>'
+                            ? `>(?![=])`
+                            : op === '<'
+                            ? `<(?![=])`
+                            : op === '!'
+                            ? `!(?![=])`
+                            : `\\${op}`
+                    );
+                    if (regex.test(expresion)) operadoresUsados.add(op);
+                }
 
-                if (operadores.length > 0) {
-                    const lista = operadores.join(" || ");
-                    resultado.push(`opera -> ${lista}`);
+                // Reemplazar variables y números por 'exp'
+                let expFormada = expresion
+                    .replace(/\b[A-Za-z_]\w*\b/g, 'expAsig')
+                    .replace(/\b\d+(\.\d+)?\b/g, 'expAsig');
+
+                // Reemplazar operadores detectados por 'opera'
+                // (orden largo primero para evitar solapamientos)
+                const operadoresOrdenados = Array.from(operadoresUsados).sort((a, b) => b.length - a.length);
+                for (const op of operadoresOrdenados) {
+                    const opEsc = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`\\s*${opEsc}\\s*`, 'g');
+                    expFormada = expFormada.replace(regex, ' opera ');
+                }
+
+                expFormada = expFormada.replace(/\s+/g, ' ').trim();
+
+                // ------------------ Salida ------------------
+                resultado.push("instruct -> var = exp;");
+                resultado.push(`exp -> ${expFormada}`);
+                if (operadoresUsados.size > 0) {
+                    resultado.push(`opera -> ${Array.from(operadoresUsados).join(" || ")}`);
                 } else {
                     resultado.push("opera -> (sin operadores)");
                 }
 
-                agregarRegla("var -> let (let||num)*");
+                agregarRegla("expAsig -> var || num");
+                agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig*");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("num -> dig dig* || dig.dig dig*");
                 agregarRegla("dig -> 0-9");
 
                 index += asignacionMatch[0].length;
                 continue;
             }
+
+
+
 
             // ------------------ No reconocido ------------------
             let nextSemicolon = resto.indexOf(';');
