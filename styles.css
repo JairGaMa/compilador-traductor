@@ -11,7 +11,7 @@ body {
 }
 
 .container {
-    max-width: 800px;
+    max-width: 950px;
     margin: 40px auto;
     padding: 30px;
     background-color: #ffffff;
@@ -59,7 +59,7 @@ body {
 }
 
 .logo {
-    width: 120px;
+    width: 150px;
     height: auto;
     object-fit: contain;
 }
@@ -188,11 +188,11 @@ body {
 textarea{
     resize: vertical !important; 
     width: 100% !important;
-    min-height: 150px !important;
+    min-height: 250px !important;
 }
 
 .grupo1{
-    max-width: 200px !important;
+    max-width: 150px !important;
 }
 
 .right-section.grupo2{

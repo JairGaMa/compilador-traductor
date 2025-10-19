@@ -583,11 +583,9 @@ function analizarSemanticoCompleto(codigo) {
             if (declararMatch) {
                 resultado.push("instruct -> declarar tipo var = expDec;");
                 agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
-                agregarRegla("expDec -> num || var");
-                agregarRegla("var -> let (let||numV)*");
+                agregarRegla("expDec -> num || \"let (let||numV)*\"|| verdadero || falso");
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (-||∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += declararMatch[0].length;
                 continue;
@@ -771,53 +769,52 @@ function analizarSemanticoCompleto(codigo) {
             }
 
             // ------------------ SELECCIONAR ------------------
-            // ------------------ SELECCIONAR ------------------
-let seleccionarMatch = resto.match(/^seleccionar\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*\{/i);
-if (seleccionarMatch) {
-    const variable = seleccionarMatch[1].trim();
+            let seleccionarMatch = resto.match(/^seleccionar\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*\{/i);
+            if (seleccionarMatch) {
+                const variable = seleccionarMatch[1].trim();
 
-    // Regla estricta de salida
-    resultado.push("instruct -> seleccionar(var){ caso (numV||var||texto||bool): instruct terminar; (caso (numV||var||texto||bool): instruct terminar;)* porDefecto: instruct instruct* terminar; }");
+                // Regla estricta de salida
+                resultado.push("instruct -> seleccionar(var){ caso (numV||var||texto||bool): instruct terminar; (caso (numV||var||texto||bool): instruct terminar;)* porDefecto: instruct instruct* terminar; }");
 
-    // Reglas auxiliares
-    agregarRegla("var -> let (let||numV)*");
-    agregarRegla("let -> A-Z || a-z");
-    agregarRegla("numV -> dig dig*");
-    agregarRegla("dig -> 0-9");
-    agregarRegla("texto -> \" let (let||numV||b)* \"");
-    agregarRegla("bool -> verdadero || falso || true || false");
+                // Reglas auxiliares
+                agregarRegla("var -> let (let||numV)*");
+                agregarRegla("let -> A-Z || a-z");
+                agregarRegla("numV -> dig dig*");
+                agregarRegla("dig -> 0-9");
+                agregarRegla("texto -> \" let (let||numV||b)* \"");
+                agregarRegla("bool -> verdadero || falso || true || false");
 
-    // --- Capturar bloque interno ---
-    let openBraces = 1;
-    let i = seleccionarMatch[0].length;
-    while (i < resto.length && openBraces > 0) {
-        if (resto[i] === '{') openBraces++;
-        else if (resto[i] === '}') openBraces--;
-        i++;
-    }
+                // --- Capturar bloque interno ---
+                let openBraces = 1;
+                let i = seleccionarMatch[0].length;
+                while (i < resto.length && openBraces > 0) {
+                    if (resto[i] === '{') openBraces++;
+                    else if (resto[i] === '}') openBraces--;
+                    i++;
+                }
 
-    let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
+                let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
 
-    // --- Analizar cada 'caso' y 'porDefecto' ---
-    const casoRegex = /caso\s+([^\:]+)\s*:\s*([\s\S]*?)terminar;/gi;
-    let match;
-    while ((match = casoRegex.exec(bloqueInterno)) !== null) {
-        const instrucciones = match[2].trim();
-        // Analizar las instrucciones internas
-        analizarBloque(instrucciones);
-    }
+                // --- Analizar cada 'caso' y 'porDefecto' ---
+                const casoRegex = /caso\s+([^\:]+)\s*:\s*([\s\S]*?)terminar;/gi;
+                let match;
+                while ((match = casoRegex.exec(bloqueInterno)) !== null) {
+                    const instrucciones = match[2].trim();
+                    // Analizar las instrucciones internas
+                    analizarBloque(instrucciones);
+                }
 
-    const porDefectoRegex = /porDefecto\s*:\s*([\s\S]*?)terminar;/i;
-    const porDefectoMatch = porDefectoRegex.exec(bloqueInterno);
-    if (porDefectoMatch) {
-        const instruccionesPD = porDefectoMatch[1].trim();
-        // Analizar las instrucciones internas del porDefecto
-        analizarBloque(instruccionesPD);
-    }
+                const porDefectoRegex = /porDefecto\s*:\s*([\s\S]*?)terminar;/i;
+                const porDefectoMatch = porDefectoRegex.exec(bloqueInterno);
+                if (porDefectoMatch) {
+                    const instruccionesPD = porDefectoMatch[1].trim();
+                    // Analizar las instrucciones internas del porDefecto
+                    analizarBloque(instruccionesPD);
+                }
 
-    index += i;
-    continue;
-}
+                index += i;
+                continue;
+            }
 
 
             // ------------------ DEFINIRCLASE ------------------
@@ -971,49 +968,32 @@ if (seleccionarMatch) {
                 let expresion = asignacionMatch[2].trim();
 
                 // Operadores en orden de prioridad (primero los de 2 caracteres)
-                const operadores = [
+                // Operadores a incluir en 'opera' (sin el '!')
+                const operadoresOpera = [
                     '>=', '<=', '==', '!=', '&&', '||',
-                    '+', '-', '*', '/', '%', '^', '>', '<', '!'
+                    '+', '-', '*', '/', '%', '^', '>', '<'
                 ];
 
-                // Detectar operadores usados sin falsos positivos
+                // Detectar operadores usados en la expresión
                 const operadoresUsados = new Set();
-
-                // Detectar operadores dobles primero
-                const operadoresDobles = ['>=', '<=', '==', '!=', '&&', '||'];
-                for (const op of operadoresDobles) {
+                for (const op of operadoresOpera) {
                     if (expresion.includes(op)) operadoresUsados.add(op);
                 }
 
-                // Detectar operadores simples que no formen parte de un doble
-                const operadoresSimples = ['+', '-', '*', '/', '%', '^', '>', '<', '!'];
-                for (const op of operadoresSimples) {
-                    const regex = new RegExp(
-                        op === '>'
-                            ? `>(?![=])`
-                            : op === '<'
-                            ? `<(?![=])`
-                            : op === '!'
-                            ? `!(?![=])`
-                            : `\\${op}`
-                    );
-                    if (regex.test(expresion)) operadoresUsados.add(op);
-                }
-
-                // Reemplazar variables y números por 'exp'
+                // Reemplazar variables y números por 'expAsig'
                 let expFormada = expresion
-                    .replace(/\b[A-Za-z_]\w*\b/g, 'expAsig')
-                    .replace(/\b\d+(\.\d+)?\b/g, 'expAsig');
+                    .replace(/\b[A-Za-z_]\w*\b/g, 'expAsig')   // variables -> expAsig
+                    .replace(/\b\d+(\.\d+)?\b/g, 'expAsig');   // números -> expAsig
 
-                // Reemplazar operadores detectados por 'opera'
-                // (orden largo primero para evitar solapamientos)
-                const operadoresOrdenados = Array.from(operadoresUsados).sort((a, b) => b.length - a.length);
+                // Reemplazar operadores detectados por 'opera' (orden largo primero)
+                const operadoresOrdenados = Array.from(operadoresUsados).sort((a,b) => b.length - a.length);
                 for (const op of operadoresOrdenados) {
                     const opEsc = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(`\\s*${opEsc}\\s*`, 'g');
                     expFormada = expFormada.replace(regex, ' opera ');
                 }
 
+                // El '!' se deja tal cual
                 expFormada = expFormada.replace(/\s+/g, ' ').trim();
 
                 // ------------------ Salida ------------------
@@ -1025,6 +1005,7 @@ if (seleccionarMatch) {
                     resultado.push("opera -> (sin operadores)");
                 }
 
+
                 agregarRegla("expAsig -> var || num");
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
@@ -1035,9 +1016,6 @@ if (seleccionarMatch) {
                 index += asignacionMatch[0].length;
                 continue;
             }
-
-
-
 
             // ------------------ No reconocido ------------------
             let nextSemicolon = resto.indexOf(';');
