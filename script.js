@@ -526,7 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
     salirBtn.addEventListener("click", () => {
         Swal.fire({
             title: '¿Estás seguro que quieres salir?',
-            icon: 'warning',
+            //icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Sí, salir',
             cancelButtonText: 'Cancelar'
@@ -543,7 +543,7 @@ document.addEventListener("DOMContentLoaded", () => {
             "Camacho García Julia Guadalupe",
             "Carreon Rivera Oscar",
             "García Mayorga Brayan Jair",
-            "*Luna Alvarado Josué Daniel*",
+            "<b>*Luna Alvarado Josué Daniel*</b>",
             "Ramirez Vazquez Wendy Itzel",
             "Vargas Guillén José Ricardo"
         ];
@@ -551,7 +551,7 @@ document.addEventListener("DOMContentLoaded", () => {
         Swal.fire({
             title: 'Equipo: Dragones 🐉',
             html: integrantes.join('<br>') + '<br><br>Docente: Silva Hernández Felipe',
-            icon: 'success',
+            //icon: 'success',
             confirmButtonText: 'Cerrar'
         });
     });
@@ -578,15 +578,48 @@ function analizarSemanticoCompleto(codigo) {
         while (index < codigoBloque.length) {
             let resto = codigoBloque.slice(index).trim();
 
-            // ------------------ DECLARAR ------------------
-            let declararMatch = resto.match(/^declarar\s+(entero|flotante|cadena|conEntero|conFlotante|conCadena|booleano)\s+[a-zA-Z_]\w*\s*=\s*[^;]+;/i);
+            // ------------------ DECLARAR (VARIABLE O ARREGLO) ------------------
+            let declararMatch = resto.match(/^declarar\s+(entero|flotante|cadena|conEntero|conFlotante|conCadena|booleano)\s+([a-zA-Z_]\w*(\[\s*\d+\s*\])?)\s*=\s*([^;]+);/i);
             if (declararMatch) {
-                resultado.push("instruct -> declarar tipo var = expDec;");
-                agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
-                agregarRegla("expDec -> num || \"let (let||numV)*\"|| verdadero || falso");
-                agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> (-||∅ )(dig dig* || dig dig* .dig dig*) ");
-                agregarRegla("dig -> 0-9");
+                const tipo = declararMatch[1].trim();
+                const variable = declararMatch[2].trim();
+                const valor = declararMatch[4].trim();
+
+                // ------------------ Detección de arreglo o variable simple ------------------
+                const esArreglo = /\[\s*\d+\s*\]/.test(variable);
+                const esListaValores = /^\{.*\}$/.test(valor);
+
+                if (esArreglo && esListaValores) {
+                    // 📦 Declaración de arreglo
+                    resultado.push("instruct -> declarar tipo var[numV] = { expDec ( , expDec )* };");
+                    agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
+                    agregarRegla("expDec -> num || \"let (let||numV)*\" || verdadero || falso");
+                    agregarRegla("var -> let (let||numV)*");
+                    agregarRegla("numV -> dig dig*");
+                    agregarRegla("let -> A-Z || a-z");
+                    agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
+                    agregarRegla("dig -> 0-9");
+                } else if (esArreglo && !esListaValores) {
+                    // 📦 Declaración de arreglo vacío o inicializado con una sola expresión
+                    resultado.push("instruct -> declarar tipo var[numV] = expDec;");
+                    agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
+                    agregarRegla("expDec -> num || \"let (let||numV)*\" || verdadero || falso");
+                    agregarRegla("var -> let (let||numV)*");
+                    agregarRegla("numV -> dig dig*");
+                    agregarRegla("let -> A-Z || a-z");
+                    agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
+                    agregarRegla("dig -> 0-9");
+                } else {
+                    // 📦 Declaración simple (variable)
+                    resultado.push("instruct -> declarar tipo var = expDec;");
+                    agregarRegla("tipo -> entero || flotante || cadena || conEntero || conFlotante || conCadena || booleano");
+                    agregarRegla("expDec -> num || \"let (let||numV)*\" || verdadero || falso");
+                    agregarRegla("var -> let (let||numV)*");
+                    agregarRegla("let -> A-Z || a-z");
+                    agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
+                    agregarRegla("dig -> 0-9");
+                }
+
                 index += declararMatch[0].length;
                 continue;
             }
@@ -611,7 +644,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += convertirMatch[0].length;
                 continue;
@@ -624,7 +657,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += aleatorioMatch[0].length;
                 continue;
@@ -639,7 +672,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
 
                 // Contenido dentro de {}
@@ -682,7 +715,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
 
                 // --- Capturar bloque interno ---
@@ -726,7 +759,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
 
                 let openBraces = 1;
@@ -871,7 +904,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += existeMatch[0].length;
                 continue;
@@ -883,7 +916,7 @@ function analizarSemanticoCompleto(codigo) {
                 resultado.push('instruct -> tamañoCadena("texto");');
                 agregarRegla('texto -> let (let||num||b)*');
                 agregarRegla("let -> A-Z || a-z");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += tamMatch[0].length;
                 continue;
@@ -933,7 +966,7 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += ordenarMatch[0].length;
                 continue;
@@ -955,37 +988,40 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
                 index += obtenerMatch[0].length;
                 continue;
             }
 
             // ------------------ ASIGNACIÓN O EXPRESIÓN ARITMÉTICA ------------------
-            let asignacionMatch = resto.match(/^([a-zA-Z_]\w*)\s*=\s*([^;]+);/i);
+            let asignacionMatch = resto.match(/^([a-zA-Z_]\w*(\[\s*\d+\s*\])?)\s*=\s*([^;]+);/i);
             if (asignacionMatch) {
                 const variable = asignacionMatch[1].trim();
-                let expresion = asignacionMatch[2].trim();
+                let expresion = asignacionMatch[3].trim();
 
-                // Operadores en orden de prioridad (primero los de 2 caracteres)
-                // Operadores a incluir en 'opera' (sin el '!')
+                // Operadores válidos (sin '!')
                 const operadoresOpera = [
                     '>=', '<=', '==', '!=', '&&', '||',
                     '+', '-', '*', '/', '%', '^', '>', '<'
                 ];
 
-                // Detectar operadores usados en la expresión
+                // Detectar operadores usados
                 const operadoresUsados = new Set();
                 for (const op of operadoresOpera) {
                     if (expresion.includes(op)) operadoresUsados.add(op);
                 }
 
-                // Reemplazar variables y números por 'expAsig'
+                // Reemplazar variables, índices y números por 'expAsig'
                 let expFormada = expresion
-                    .replace(/\b[A-Za-z_]\w*\b/g, 'expAsig')   // variables -> expAsig
-                    .replace(/\b\d+(\.\d+)?\b/g, 'expAsig');   // números -> expAsig
+                    // variables con índice -> expAsig
+                    .replace(/\b[A-Za-z_]\w*\s*\[\s*\d+\s*\]/g, 'expAsig')
+                    // variables simples -> expAsig
+                    .replace(/\b[A-Za-z_]\w*\b/g, 'expAsig')
+                    // números -> expAsig
+                    .replace(/\b\d+(\.\d+)?\b/g, 'expAsig');
 
-                // Reemplazar operadores detectados por 'opera' (orden largo primero)
+                // Reemplazar operadores por 'opera'
                 const operadoresOrdenados = Array.from(operadoresUsados).sort((a,b) => b.length - a.length);
                 for (const op of operadoresOrdenados) {
                     const opEsc = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -993,11 +1029,14 @@ function analizarSemanticoCompleto(codigo) {
                     expFormada = expFormada.replace(regex, ' opera ');
                 }
 
-                // El '!' se deja tal cual
                 expFormada = expFormada.replace(/\s+/g, ' ').trim();
 
                 // ------------------ Salida ------------------
-                resultado.push("instruct -> var = exp;");
+                if (variable.includes("[")) {
+                    resultado.push("instruct -> var[numV] = exp;");
+                } else {
+                    resultado.push("instruct -> var = exp;");
+                }
                 resultado.push(`exp -> ${expFormada}`);
                 if (operadoresUsados.size > 0) {
                     resultado.push(`opera -> ${Array.from(operadoresUsados).join(" || ")}`);
@@ -1005,12 +1044,12 @@ function analizarSemanticoCompleto(codigo) {
                     resultado.push("opera -> (sin operadores)");
                 }
 
-
-                agregarRegla("expAsig -> var || num");
+                // Reglas base
+                agregarRegla("expAsig -> var || num || var[numV]");
                 agregarRegla("var -> let (let||numV)*");
                 agregarRegla("let -> A-Z || a-z");
                 agregarRegla("numV -> dig dig*");
-                agregarRegla("num -> dig dig* || dig.dig dig*");
+                agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
 
                 index += asignacionMatch[0].length;
