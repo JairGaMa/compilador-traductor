@@ -718,33 +718,18 @@ function analizarSemanticoCompleto(codigo) {
                 agregarRegla("num -> (- || ∅ )(dig dig* || dig dig* .dig dig*) ");
                 agregarRegla("dig -> 0-9");
 
-                // --- Capturar bloque interno ---
+                // --- Capturar bloque interno correctamente usando mientrasMatch ---
                 let openBraces = 1;
-                let i = seleccionarMatch[0].length;
+                let i = mientrasMatch[0].length; // <-- usar mientrasMatch aquí
                 while (i < resto.length && openBraces > 0) {
                     if (resto[i] === '{') openBraces++;
                     else if (resto[i] === '}') openBraces--;
                     i++;
                 }
 
-                let bloqueInterno = resto.slice(seleccionarMatch[0].length, i - 1);
-
-                // --- Analizar cada 'caso' y 'porDefecto' ---
-                const casoRegex = /caso\s+([^\:]+)\s*:\s*([\s\S]*?)terminar;/gi;
-                let match;
-                while ((match = casoRegex.exec(bloqueInterno)) !== null) {
-                    const instrucciones = match[2].trim();
-                    // Analizar las instrucciones internas
-                    analizarBloque(instrucciones);
-                }
-
-                const porDefectoRegex = /porDefecto\s*:\s*([\s\S]*?)terminar;/i;
-                const porDefectoMatch = porDefectoRegex.exec(bloqueInterno);
-                if (porDefectoMatch) {
-                    const instruccionesPD = porDefectoMatch[1].trim();
-                    // Analizar las instrucciones internas del porDefecto
-                    analizarBloque(instruccionesPD);
-                }
+                // tomar el contenido entre las llaves y analizarlo
+                let bloqueInterno = resto.slice(mientrasMatch[0].length, i - 1);
+                analizarBloque(bloqueInterno);
 
                 index += i;
                 continue;
